@@ -1,10 +1,14 @@
 const { MongoClient, ServerApiVersion } = require('mongodb');
 const mongoose = require('mongoose');
 const express = require('express');
+const cors = require('cors');
+
+
 
 const Chat = require('./models/chats');
 const Users = require('./models/users');
 const ChatHistory = require('./models/chatHistory');
+const Task = require('./models/task');
 
 let chats = [
     { name: "Brawl", code: "1234" },
@@ -34,6 +38,8 @@ let users = [
 ];
 
 app = express();
+app.use(cors());
+app.use(express.json());
 
 const dbURI = "mongodb+srv://franchukivan123:I9lNfORsO17CTLPM@chat.bjs0pvf.mongodb.net/ChatHistory?retryWrites=true&w=majority";
 
@@ -433,5 +439,63 @@ io.on('connection', (socket) => {
         console.log('a user disconnected');
     });
 });
+
+
+
+//server
+
+let tasks = [];
+
+let taskId = tasks.length;
+
+// Додавання нової задачі
+app.post('/tasks', (req, res) => {
+    const newTaskData = req.body;
+    newTaskData.taskId = taskId++; // Використовуйте вашу логіку для створення ID
+    Task.create(newTaskData)
+        .then(newTask => {
+            res.json({ message: 'Task added successfully', task: newTask });
+        })
+        .catch(error => {
+            console.error('Error adding task:', error);
+            res.status(500).json({ message: 'Failed to add task' });
+        });
+});
+
+
+// Оновлення stage задачі
+app.put('/tasks/:taskId', (req, res) => {
+    const taskId = req.params.taskId;
+    const { stage } = req.body;
+
+    Task.findOneAndUpdate({ taskId }, { stage }, { new: true })
+        .then(updatedTask => {
+            if (!updatedTask) {
+                return res.status(404).json({ message: 'Task not found' });
+            }
+            res.json({ message: 'Task stage updated successfully', task: updatedTask });
+        })
+        .catch(error => {
+            console.error('Error updating task stage:', error);
+            res.status(500).json({ message: 'Failed to update task stage' });
+        });
+});
+
+
+// Повернення всіх задач
+app.get('/tasks', (req, res) => {
+    Task.find().select('taskId text importance stage').lean()
+        .then(tasks => {
+            res.json({ tasks });
+        })
+        .catch(error => {
+            console.error('Error retrieving tasks:', error);
+            res.status(500).json({ message: 'Failed to retrieve tasks' });
+        });
+});
+
+
+
+
 
 http.listen(8080, () => console.log('listening on http://localhost:8080'));
