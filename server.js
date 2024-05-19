@@ -227,25 +227,45 @@ app.get('/delete-users', async (req, res) => {
 });
 
 app.get('/get-last-three-messages', (req, res) => {
-    // Identify the user, for example by a user id passed in the request
-    const userId = req.query.userId;
+    const name = req.query.name;
+    const surname = req.query.surname;
 
-    // Find the user in the database
-    Users.findById(userId)
+    // Find the user in the database by name and surname
+    Users.findOne({ name: name, surname: surname })
         .then(user => {
+            if (!user) {
+                res.status(404).send('User not found');
+                return;
+            }
+
             // Get the chat codes the user is a part of
             const userChatCodes = user.chats.map(chat => chat.chatCode);
 
-            // Filter the chat histories based on the user's chats
+            // Aggregate all chat histories based on the user's chats
             ChatHistory.aggregate([
                 { $match: { chatCode: { $in: userChatCodes } } },
-                { $project: { chatCode: 1, messages: { $slice: ["$messages", -3] } } }
+                { $unwind: "$messages" }, // Unwind messages array
+                {
+                    $match: {
+                        "messages.user": { $ne: `${name} ${surname}` } // Exclude messages from the same user
+                    }
+                },
+                { $sort: { "messages.timestamp": -1 } }, // Sort messages by timestamp in descending order
+                {
+                    $group: {
+                        _id: null,
+                        messages: { $push: { message: "$messages", chatCode: "$chatCode" } } // Push all messages into an array with chatCode
+                    }
+                },
+                { $project: { messages: { $slice: ["$messages", 3] } } } // Limit to 3 messages
             ])
                 .then((result) => {
-                    const lastMessages = {};
-                    result.forEach(chat => {
-                        lastMessages[chat.chatCode] = chat.messages;
-                    });
+                    if (result.length === 0) {
+                        res.status(404).send('No messages found');
+                        return;
+                    }
+
+                    const lastMessages = result[0].messages;
                     res.send(lastMessages);
                 })
                 .catch((err) => {
@@ -258,6 +278,10 @@ app.get('/get-last-three-messages', (req, res) => {
             res.status(500).send('Error retrieving user');
         });
 });
+
+
+
+
 
 // Function to fetch chats
 function fetchChats() {
@@ -442,7 +466,24 @@ io.on('connection', (socket) => {
 
 
 
-//server
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//task
 
 let tasks = [];
 
@@ -462,7 +503,6 @@ app.post('/tasks', (req, res) => {
         });
 });
 
-
 // Оновлення stage задачі
 app.put('/tasks/:taskId', (req, res) => {
     const taskId = req.params.taskId;
@@ -480,7 +520,6 @@ app.put('/tasks/:taskId', (req, res) => {
             res.status(500).json({ message: 'Failed to update task stage' });
         });
 });
-
 
 // Повернення всіх задач
 app.get('/tasks', (req, res) => {
